@@ -10,7 +10,7 @@ const HeroSection = () => {
       {/* Background: School Image with dark overlay */}
       <div className="absolute inset-0">
         <img
-          src="/school-hero.jpg"
+          src="/school-hero.jpeg"
           alt="Sri Anveeksha Public School"
           className="w-full h-full object-cover object-center"
         />
