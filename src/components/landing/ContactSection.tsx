@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Check, Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -8,6 +8,23 @@ const ContactSection = () => {
   const [form, setForm] = useState({ name: "", email: "", phone: "", message: "" });
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [settings, setSettings] = useState({
+    address: "Ootla, Jinnaram, Sangareddy District, Telangana 502319",
+    phone: "+91 98765 43210",
+    email: "info@srianveeksha.edu.in",
+  });
+
+  useEffect(() => {
+    supabase.from("school_settings").select("address, phone, email").eq("id", 1).single().then(({ data }) => {
+      if (data) {
+        setSettings({
+          address: data.address || settings.address,
+          phone: data.phone || settings.phone,
+          email: data.email || settings.email,
+        });
+      }
+    });
+  }, []);
 
   const handle = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -45,9 +62,9 @@ const ContactSection = () => {
             {/* Contact details */}
             <div className="space-y-4">
               {[
-                { icon: "📍", label: "Address", value: "Ootla, Jinnaram, Sangareddy District, Telangana 502319" },
-                { icon: "📞", label: "Phone", value: "+91 98765 43210" },
-                { icon: "✉️", label: "Email", value: "info@srianveeksha.edu.in" },
+                { icon: "📍", label: "Address", value: settings.address },
+                { icon: "📞", label: "Phone", value: settings.phone },
+                { icon: "✉️", label: "Email", value: settings.email },
                 { icon: "🕐", label: "Office Hours", value: "Monday – Saturday: 9:00 AM – 4:00 PM" },
               ].map((c) => (
                 <div key={c.label} className="flex gap-3">

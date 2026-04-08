@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 
@@ -30,6 +30,19 @@ const AdmissionsSection = () => {
   const [formData, setFormData] = useState({ parentName: "", childName: "", class: "", phone: "", email: "", message: "" });
   const [submitted, setSubmitted] = useState(false);
   const [openDocs, setOpenDocs] = useState(false);
+  const [academicYear, setAcademicYear] = useState("2026–27");
+
+  useEffect(() => {
+    import("@/lib/supabase").then(({ supabase }) => {
+      supabase.from("school_settings").select("academic_start_date, academic_end_date").eq("id", 1).single().then(({ data }) => {
+        if (data?.academic_start_date && data?.academic_end_date) {
+          const start = new Date(data.academic_start_date).getFullYear();
+          const end = new Date(data.academic_end_date).getFullYear().toString().slice(2);
+          setAcademicYear(`${start}–${end}`);
+        }
+      });
+    });
+  }, []);
 
   const handle = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -47,7 +60,7 @@ const AdmissionsSection = () => {
           className="bg-gradient-to-r from-[#d4af37] to-[#0c2340] rounded-2xl p-8 text-center text-white mb-14">
           <p className="text-sm font-semibold uppercase tracking-widest opacity-80 mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Enroll Today</p>
           <h2 className="text-3xl sm:text-4xl font-bold mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            Admissions open for 2026–27
+            Admissions open for {academicYear}
           </h2>
           <p className="opacity-80 text-lg" style={{ fontFamily: "Inter, sans-serif" }}>Limited seats available. Secure your child's future today.</p>
           <div className="flex flex-wrap gap-3 justify-center mt-6">
@@ -67,7 +80,7 @@ const AdmissionsSection = () => {
           <div className="space-y-8">
             {/* Timeline */}
             <motion.div initial={{ opacity: 0, x: -20 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }}>
-              <h3 className="font-bold text-slate-900 text-xl mb-5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Key Dates for 2025–26</h3>
+              <h3 className="font-bold text-slate-900 text-xl mb-5" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Key Dates for 2026–27</h3>
               <div className="relative">
                 <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-slate-200" />
                 {timeline.map((t, i) => (

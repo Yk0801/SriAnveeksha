@@ -2,9 +2,9 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 const principal = {
-  name: "Mrs. Ananya Mishra",
-  designation: "Principal",
-  image: "/teacher_principal.png",
+  name: "Mrs. Bollina Parvathi",
+  designation: "Founder & Principal",
+  image: "/teacher_principal.jpeg",
   message: "At Sri Anveeksha, we don't just educate — we inspire. Every child who walks through our doors carries a unique spark, and our mission is to help them let it shine.",
 };
 
