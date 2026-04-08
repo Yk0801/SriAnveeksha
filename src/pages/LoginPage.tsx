@@ -84,10 +84,15 @@ const LoginPage = () => {
     setView("newpwd");
   };
 
+  const isValidPassword = (pwd: string) => /[A-Z]/.test(pwd) && /[a-z]/.test(pwd) && /[^A-Za-z0-9]/.test(pwd) && pwd.length >= 8;
+
   const handleSetNewPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPwd !== confirmPwd) { setFlowErr("Passwords do not match."); return; }
-    if (newPwd.length < 8) { setFlowErr("Password must be at least 8 characters."); return; }
+    if (!isValidPassword(newPwd)) {
+      setFlowErr("Password must be at least 8 chars, containing uppercase, lowercase, and symbols.");
+      return;
+    }
     setFlowLoading(true); setFlowErr("");
     // Set the new password via update (user already verified OTP)
     const { error } = await changePassword(newPwd);
@@ -100,7 +105,10 @@ const LoginPage = () => {
   const handleMustChange = async (e: React.FormEvent) => {
     e.preventDefault();
     if (mustPwd !== mustConfirm) { setFlowErr("Passwords do not match."); return; }
-    if (mustPwd.length < 8) { setFlowErr("Password must be at least 8 characters."); return; }
+    if (!isValidPassword(mustPwd)) {
+      setFlowErr("Password must be at least 8 chars, containing uppercase, lowercase, and symbols.");
+      return;
+    }
     setFlowLoading(true); setFlowErr("");
     const { error } = await changePassword(mustPwd);
     setFlowLoading(false);
