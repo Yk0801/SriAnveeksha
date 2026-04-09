@@ -55,7 +55,7 @@ const AboutSection = () => {
               "We believe the best education starts with a single question: <span className="text-[#d4af37]">Why?</span>"
             </p>
             <p className="mt-4 text-[#d4af37] font-semibold text-sm" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-              — Sri Anveeksha Public School
+              — Sri Anveeksha Techno School
             </p>
           </motion.div>
 
