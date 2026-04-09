@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+Himport { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
@@ -139,7 +139,7 @@ const LoginPage = () => {
 
       {/* School header */}
       <div className="text-center mb-8 relative z-10">
-        <h1 className="text-white font-bold text-2xl" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Sri Anveeksha Public School</h1>
+        <h1 className="text-white font-bold text-2xl" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Sri Anveeksha Techno School</h1>
         <p className="text-white/60 text-sm mt-1 tracking-wider uppercase font-medium" style={{ fontFamily: "Inter,sans-serif" }}>Ootla, Jinnaram, Telangana</p>
       </div>
 
