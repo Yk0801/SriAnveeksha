@@ -13,7 +13,8 @@ const LoginPage = () => {
   const { loginAdmin, loginParent, sendOtp, verifyOtp, changePassword, adminUser, parentStudentId } = useAuth();
 
   useEffect(() => {
-    if (adminUser) navigate("/admin", { replace: true });
+    if (adminUser && !adminUser.must_change_password) navigate("/admin", { replace: true });
+    else if (adminUser && adminUser.must_change_password) setView("mustchange");
     else if (parentStudentId) navigate("/parent", { replace: true });
   }, [adminUser, parentStudentId, navigate]);
 
