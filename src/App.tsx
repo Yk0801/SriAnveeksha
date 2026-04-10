@@ -19,6 +19,7 @@ const RequireAdmin = ({ children }: { children: React.ReactNode }) => {
   const { adminUser } = useAuth();
   const location = useLocation();
   if (!adminUser) return <Navigate to="/login?role=admin" state={{ from: location }} replace />;
+  if (adminUser.must_change_password) return <Navigate to="/login?role=admin" state={{ from: location }} replace />;
   return <>{children}</>;
 };
 
