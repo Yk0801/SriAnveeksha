@@ -26,7 +26,7 @@ const HeroSection = () => {
           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
         >
           <span className="w-2 h-2 rounded-full bg-[#d4af37] animate-pulse" />
-          Admissions Open for 2025–26
+          Admissions Open for 2026–27
         </motion.div>
 
         {/* School Name Label */}
@@ -35,7 +35,7 @@ const HeroSection = () => {
           className="text-white/80 text-sm tracking-[0.2em] uppercase font-medium"
           style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
         >
-          Sri Anveeksha Public School · Ootla, Jinnaram
+          Sri Anveeksha Techno School · Ootla, Jinnaram
         </motion.p>
 
         {/* Headline */}
