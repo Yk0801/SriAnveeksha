@@ -6,7 +6,7 @@ const timeline = [
   { label: "Application Opens", date: "May 1, 2026" },
   // { label: "Last Date to Apply", date: "Apr 30, 2026" },
   // { label: "Assessment Day", date: "May 10, 2026" },
-  { label: "Offers Sent", date: "Jun 5, 2026" },
+  { label: "Offers Sent", date: "June 5, 2026" },
   { label: "Classes Begin", date: "Jun 10, 2026" },
 ];
 
@@ -60,7 +60,7 @@ const AdmissionsSection = () => {
           className="bg-gradient-to-r from-[#d4af37] to-[#0c2340] rounded-2xl p-8 text-center text-white mb-14">
           <p className="text-sm font-semibold uppercase tracking-widest opacity-80 mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Enroll Today</p>
           <h2 className="text-3xl sm:text-4xl font-bold mb-2" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>
-            Admissions open for {2026-2027}
+            Admissions open for {academicYear}
           </h2>
           <p className="opacity-80 text-lg" style={{ fontFamily: "Inter, sans-serif" }}>Limited seats available. Secure your child's future today.</p>
           <div className="flex flex-wrap gap-3 justify-center mt-6">
