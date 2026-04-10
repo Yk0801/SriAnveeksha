@@ -39,7 +39,7 @@ const Navbar = () => {
             <img src="/school_logo.jpeg" alt="Sri Anveeksha Logo" className="w-10 h-10 object-contain rounded-xl bg-white p-0.5 shadow-sm" onError={(e) => (e.currentTarget.style.display = 'none')} />
             <div className="text-left hidden sm:block">
               <div className={`font-bold text-sm leading-tight transition-colors ${scrolled ? "text-slate-900" : "text-white"}`} style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>Sri Anveeksha</div>
-              <div className={`text-xs transition-colors ${scrolled ? "text-slate-500" : "text-white/80"}`}>Public School</div>
+              <div className={`text-xs transition-colors ${scrolled ? "text-slate-500" : "text-white/80"}`}>Techno School</div>
             </div>
           </button>
 
