@@ -41,8 +41,8 @@ const TeamSection = () => {
           initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
           className="max-w-3xl mx-auto mb-16 bg-white rounded-3xl shadow-lg shadow-slate-200/50 border border-slate-100 overflow-hidden flex flex-col md:flex-row items-center"
         >
-          <div className="w-full md:w-2/5 aspect-square md:aspect-auto md:h-full relative overflow-hidden">
-            <img src={principal.image} alt={principal.name} className="w-full h-full object-cover object-top" />
+          <div className="w-full md:w-2/5 relative overflow-hidden shrink-0 bg-slate-50">
+            <img src={principal.image} alt={principal.name} className="w-full h-auto object-cover object-top block" />
           </div>
           <div className="w-full md:w-3/5 p-8 text-center md:text-left">
             <h3 className="font-bold text-2xl text-slate-900 mb-1" style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}>{principal.name}</h3>
