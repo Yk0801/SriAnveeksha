@@ -4,13 +4,13 @@ import { Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/context/AuthContext";
 
-type View = "login" | "forgot" | "otp" | "newpwd" | "mustchange";
+type View = "login" | "forgot" | "otp" | "newpwd" | "mustchange" | "p_forgot" | "p_methods" | "p_otp" | "p_newpwd";
 
 const LoginPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const role = searchParams.get("role") || "parent";
-  const { loginAdmin, loginParent, sendOtp, verifyOtp, changePassword, adminUser, parentStudentId } = useAuth();
+  const { loginAdmin, loginParent, sendOtp, verifyOtp, changePassword, adminUser, parentStudentId, findParentForReset, sendParentOtpEmail, verifyParentOtpEmail, changeParentPasswordOffline } = useAuth();
 
   useEffect(() => {
     if (adminUser && !adminUser.must_change_password) navigate("/admin", { replace: true });
@@ -32,7 +32,7 @@ const LoginPage = () => {
   const [aLoading, setALoading] = useState(false);
   const [aErr, setAErr] = useState("");
 
-  // Forgot / OTP / New password flow
+  // Forgot / OTP / New password flow (Admin)
   const [view, setView] = useState<View>("login");
   const [forgotEmail, setForgotEmail] = useState("");
   const [otpVal, setOtpVal] = useState("");
@@ -44,6 +44,11 @@ const LoginPage = () => {
   // Must-change password (first login)
   const [mustPwd, setMustPwd] = useState("");
   const [mustConfirm, setMustConfirm] = useState("");
+
+  // Parent Reset state
+  const [pData, setPData] = useState<{name?: string, email?: string, mobile?: string} | null>(null);
+  const [pMethod, setPMethod] = useState<"email" | "sms">("email");
+  const [pFirebaseResult, setPFirebaseResult] = useState<any>(null);
 
   const handleParentLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -118,6 +123,119 @@ const LoginPage = () => {
     navigate("/admin");
   };
 
+  // --- Parent Reset Handlers ---
+  const handlePFind = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFlowLoading(true); setFlowErr("");
+    const { error, name, father_email_id, father_mobile_number } = await findParentForReset(pAdm);
+    setFlowLoading(false);
+    if (error || (!father_email_id && !father_mobile_number)) {
+      setFlowErr(error || "No contact info available for this admission number.");
+      return;
+    }
+    setPData({ name, email: father_email_id, mobile: father_mobile_number });
+    setView("p_methods");
+  };
+
+  const handlePSendOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFlowLoading(true); setFlowErr("");
+
+    if (pMethod === "email") {
+      if (!pData?.email) { setFlowErr("No email registered."); setFlowLoading(false); return; }
+      const { error } = await sendParentOtpEmail(pAdm, pData.email, pData.name || "Parent");
+      setFlowLoading(false);
+      if (error) { setFlowErr(error); return; }
+      toast.success(`OTP sent to email!`);
+      setView("p_otp");
+    } else {
+      if (!pData?.mobile) { setFlowErr("No mobile registered."); setFlowLoading(false); return; }
+      try {
+        // Firebase Auth Requires Recaptcha!
+        const { auth, RecaptchaVerifier, signInWithPhoneNumber } = await import("@/lib/firebase");
+        
+        // Clear old instance to prevent double-render crashes
+        if ((window as any).recaptchaVerifier) {
+          try { (window as any).recaptchaVerifier.clear(); } catch (e) {}
+          (window as any).recaptchaVerifier = undefined;
+        }
+        
+        // Ensure format is E.164 (e.g. +91XXXXXXXXXX)
+        let phone = pData.mobile;
+        if (!phone.startsWith("+")) phone = "+91" + phone;
+
+        // Create a VISIBLE normal reCAPTCHA. Invisible reCAPTCHA is highly aggressive on un-secured localhost URLs and often throws invalid-app-credentials.
+        const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+          size: 'normal'
+        });
+        (window as any).recaptchaVerifier = verifier;
+
+        // Wait for user to manually complete the CAPTCHA now!
+        const confirmationResult = await signInWithPhoneNumber(auth, phone, verifier);
+        setPFirebaseResult(confirmationResult);
+        toast.success(`OTP sent via SMS!`);
+        setView("p_otp");
+      } catch (err: any) {
+        console.error(err);
+        setFlowErr("Failed to send SMS (Ensure Firebase is configured).");
+      } finally {
+        setFlowLoading(false);
+      }
+    }
+  };
+
+  const handlePVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFlowLoading(true); setFlowErr("");
+
+    if (pMethod === "email") {
+      const { error } = await verifyParentOtpEmail(pAdm, otpVal);
+      setFlowLoading(false);
+      if (error) { setFlowErr(error); return; }
+      setView("p_newpwd");
+    } else {
+      try {
+        if (!pFirebaseResult) throw new Error("No SMS session active");
+        await pFirebaseResult.confirm(otpVal);
+        setView("p_newpwd");
+      } catch (err: any) {
+        console.error(err);
+        setFlowErr("Invalid or expired SMS OTP.");
+      } finally {
+        setFlowLoading(false);
+      }
+    }
+  };
+
+  const handlePSetNewPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPwd !== confirmPwd) { setFlowErr("Passwords do not match."); return; }
+    if (!isValidPassword(newPwd)) {
+      setFlowErr("Password must be at least 8 chars, containing uppercase, lowercase, and symbols.");
+      return;
+    }
+    setFlowLoading(true); setFlowErr("");
+    const { error } = await changeParentPasswordOffline(pAdm, newPwd);
+    setFlowLoading(false);
+    if (error) { setFlowErr(error); return; }
+    toast.success("Password updated! Please log in.");
+    setView("login");
+  };
+
+  const maskEmail = (email?: string) => {
+    if (!email) return "";
+    const [name, domain] = email.split("@");
+    if (name.length <= 2) return `${name[0]}***@${domain}`;
+    return `${name[0]}${"*".repeat(name.length - 2)}${name[name.length - 1]}@${domain}`;
+  };
+
+  const maskPhone = (phone?: string) => {
+    if (!phone) return "";
+    const clean = phone.replace(/\D/g, '');
+    if (clean.length < 4) return clean;
+    return `*******${clean.slice(-3)}`;
+  };
+
   const inputCls = "w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-[#d4af37]/40 focus:border-[#d4af37] transition-all bg-slate-50 hover:bg-white focus:bg-white";
   const btnPrimary = "w-full py-3.5 rounded-xl bg-[#d4af37] text-white font-bold text-sm hover:bg-[#c49e29] active:scale-[0.98] disabled:opacity-60 transition-all";
   const label = "block text-sm font-semibold text-slate-700 mb-1.5";
@@ -182,6 +300,10 @@ const LoginPage = () => {
                   </button>
                 </div>
               </div>
+              <button type="button" onClick={() => { setPAdm(""); setView("p_forgot"); setFlowErr(""); }}
+                className="text-xs text-[#d4af37] hover:underline font-medium -mt-2 block text-right w-full" style={{ fontFamily: "Inter,sans-serif" }}>
+                Forgot password?
+              </button>
               {pErr && <p className="text-red-600 text-xs font-medium bg-red-50 px-3 py-2 rounded-lg">{pErr}</p>}
               <button type="submit" disabled={pLoading} className={btnPrimary} style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
                 {pLoading ? "Signing in…" : "Sign in to Parent Portal"}
@@ -304,6 +426,101 @@ const LoginPage = () => {
               {flowErr && <p className="text-red-600 text-xs font-medium bg-red-50 px-3 py-2 rounded-lg">{flowErr}</p>}
               <button type="submit" disabled={flowLoading} className={btnPrimary} style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
                 {flowLoading ? "Saving…" : "Set Password & Enter Dashboard"}
+              </button>
+            </form>
+          </div>
+        )}
+        {/* ═══════ PARENT FORGOT PASSWORD ═══════ */}
+        {view === "p_forgot" && (
+          <div className="bg-white rounded-3xl shadow-2xl p-8">
+            <button onClick={() => setView("login")} className="text-slate-400 hover:text-slate-600 text-sm mb-5 flex items-center gap-1">← Back to login</button>
+            <h2 className="font-bold text-slate-900 text-xl mb-1" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Parent Password Reset</h2>
+            <p className="text-slate-500 text-sm mb-6" style={{ fontFamily: "Inter,sans-serif" }}>Enter your student's Admission Number to find your account.</p>
+            <form onSubmit={handlePFind} className="space-y-4">
+              <div>
+                <label className={label} style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Admission Number</label>
+                <input type="text" required value={pAdm} onChange={e => setPAdm(e.target.value)} placeholder="e.g. ADM001" className={inputCls} style={{ fontFamily: "Inter,sans-serif" }} />
+              </div>
+              {flowErr && <p className="text-red-600 text-xs font-medium bg-red-50 px-3 py-2 rounded-lg">{flowErr}</p>}
+              <button type="submit" disabled={flowLoading} className={btnPrimary} style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+                {flowLoading ? "Searching…" : "Continue"}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* ═══════ PARENT OTP METHODS ═══════ */}
+        {view === "p_methods" && (
+          <div className="bg-white rounded-3xl shadow-2xl p-8">
+            <button onClick={() => setView("p_forgot")} className="text-slate-400 hover:text-slate-600 text-sm mb-5 flex items-center gap-1">← Back</button>
+            <h2 className="font-bold text-slate-900 text-xl mb-1" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Account Found</h2>
+            <p className="text-slate-500 text-sm mb-6" style={{ fontFamily: "Inter,sans-serif" }}>Hi {pData?.name}, where should we send your OTP?</p>
+            <form onSubmit={handlePSendOtp} className="space-y-4">
+              
+              <div className="space-y-3 mb-6">
+                <label className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${pMethod === "email" ? "border-[#d4af37] bg-gold-50/10" : "border-slate-100 bg-white"}`}>
+                  <input type="radio" name="p_method" value="email" checked={pMethod === "email"} onChange={() => setPMethod("email")} className="w-4 h-4 text-[#d4af37] focus:ring-[#d4af37]" />
+                  <div>
+                    <p className="font-bold text-slate-900 text-sm">Send via Email</p>
+                    <p className="text-slate-500 text-xs">{maskEmail(pData?.email) || "Not available"}</p>
+                  </div>
+                </label>
+                
+                <label className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${pMethod === "sms" ? "border-[#d4af37] bg-gold-50/10" : "border-slate-100 bg-white"}`}>
+                  <input type="radio" name="p_method" value="sms" checked={pMethod === "sms"} onChange={() => setPMethod("sms")} className="w-4 h-4 text-[#d4af37] focus:ring-[#d4af37]" />
+                  <div>
+                    <p className="font-bold text-slate-900 text-sm">Send via SMS</p>
+                    <p className="text-slate-500 text-xs">{maskPhone(pData?.mobile) || "Not available"}</p>
+                  </div>
+                </label>
+              </div>
+
+              {/* Invisible Recaptcha target for Firebase */}
+              <div id="recaptcha-container"></div>
+
+              {flowErr && <p className="text-red-600 text-xs font-medium bg-red-50 px-3 py-2 rounded-lg">{flowErr}</p>}
+              <button type="submit" disabled={flowLoading || (pMethod === "email" && !pData?.email) || (pMethod === "sms" && !pData?.mobile)} className={btnPrimary} style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+                {flowLoading ? "Sending OTP…" : "Send OTP"}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* ═══════ PARENT VERIFY OTP ═══════ */}
+        {view === "p_otp" && (
+          <div className="bg-white rounded-3xl shadow-2xl p-8">
+            <h2 className="font-bold text-slate-900 text-xl mb-1" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Enter OTP</h2>
+            <p className="text-slate-500 text-sm mb-6" style={{ fontFamily: "Inter,sans-serif" }}>
+              Code sent to {pMethod === "email" ? maskEmail(pData?.email) : maskPhone(pData?.mobile)}.
+            </p>
+            <form onSubmit={handlePVerifyOtp} className="space-y-4">
+              <div>
+                <label className={label} style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>OTP Code</label>
+                <input type="text" maxLength={6} required value={otpVal} onChange={e => setOtpVal(e.target.value.replace(/\D/g, ""))} placeholder="6-digit code" className={`${inputCls} text-center text-2xl tracking-[0.5em] font-mono`} />
+              </div>
+              {flowErr && <p className="text-red-600 text-xs font-medium bg-red-50 px-3 py-2 rounded-lg">{flowErr}</p>}
+              <button type="submit" disabled={flowLoading} className={btnPrimary} style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+                {flowLoading ? "Verifying…" : "Verify OTP"}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* ═══════ PARENT SET NEW PASSWORD ═══════ */}
+        {view === "p_newpwd" && (
+          <div className="bg-white rounded-3xl shadow-2xl p-8">
+            <h2 className="font-bold text-slate-900 text-xl mb-1" style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>Set New Password</h2>
+            <p className="text-slate-500 text-sm mb-6" style={{ fontFamily: "Inter,sans-serif" }}>Choose a strong password (min. 8 characters).</p>
+            <form onSubmit={handlePSetNewPassword} className="space-y-4">
+              {[{ label: "New Password", val: newPwd, set: setNewPwd }, { label: "Confirm Password", val: confirmPwd, set: setConfirmPwd }].map(f => (
+                <div key={f.label}>
+                  <label className={label} style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>{f.label}</label>
+                  <input type="password" required value={f.val} onChange={e => f.set(e.target.value)} className={inputCls} style={{ fontFamily: "Inter,sans-serif" }} />
+                </div>
+              ))}
+              {flowErr && <p className="text-red-600 text-xs font-medium bg-red-50 px-3 py-2 rounded-lg">{flowErr}</p>}
+              <button type="submit" disabled={flowLoading} className={btnPrimary} style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
+                {flowLoading ? "Saving…" : "Save Password & Login"}
               </button>
             </form>
           </div>
