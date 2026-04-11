@@ -27,6 +27,10 @@ interface AuthContextType {
     changePassword: (newPassword: string) => Promise<{ error?: string }>;
     sendOtp: (email: string) => Promise<{ error?: string }>;
     verifyOtp: (email: string, otp: string) => Promise<{ error?: string }>;
+    findParentForReset: (admissionNo: string) => Promise<{ error?: string; father_email_id?: string; father_mobile_number?: string, name?: string }>;
+    sendParentOtpEmail: (admissionNo: string, email: string, name: string) => Promise<{ error?: string }>;
+    verifyParentOtpEmail: (admissionNo: string, otp: string) => Promise<{ error?: string }>;
+    changeParentPasswordOffline: (admissionNo: string, newPassword: string) => Promise<{ error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -165,6 +169,78 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return {};
     };
 
+    // --- Parent Forgot Password Methods ---
+    const findParentForReset = async (admissionNo: string) => {
+        const { data, error } = await supabase
+            .from("students")
+            .select("name, father_email_id, father_mobile_number, mother_email_id, mother_mobile_number, guardian_mail_id, guardian_mobile_number, email, mobile_number")
+            .eq("admission_no", admissionNo.trim().toUpperCase())
+            .single();
+            
+        if (error || !data) return { error: "Student not found." };
+        
+        // Find best email
+        const targetEmail = data.father_email_id || data.mother_email_id || data.guardian_mail_id || data.email;
+        // Find best mobile
+        const targetMobile = data.father_mobile_number || data.mother_mobile_number || data.guardian_mobile_number || data.mobile_number;
+        
+        return { 
+            name: data.name, 
+            father_email_id: targetEmail, 
+            father_mobile_number: targetMobile 
+        };
+    };
+
+    const sendParentOtpEmail = async (admissionNo: string, email: string, name: string) => {
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+        const { error } = await supabase
+            .from("students")
+            .update({ otp, otp_expires_at: expires })
+            .eq("admission_no", admissionNo.trim().toUpperCase());
+
+        if (error) return { error: "Failed to set OTP in database." };
+
+        // Call the Edge Function
+        try {
+            const { error: fnErr } = await supabase.functions.invoke("send-parent-otp", {
+                body: { email, otp, name }
+            });
+            if (fnErr) return { error: fnErr.message };
+        } catch (e: any) {
+            return { error: e.message || "Failed to trigger edge function" };
+        }
+
+        return {};
+    };
+
+    const verifyParentOtpEmail = async (admissionNo: string, otp: string) => {
+        const { data, error } = await supabase
+            .from("students")
+            .select("otp, otp_expires_at")
+            .eq("admission_no", admissionNo.trim().toUpperCase())
+            .single();
+
+        if (error || !data) return { error: "Student not found." };
+        if (data.otp !== otp) return { error: "Incorrect OTP." };
+        if (new Date(data.otp_expires_at) < new Date()) return { error: "OTP has expired." };
+
+        // Clear OTP after use
+        await supabase.from("students").update({ otp: null, otp_expires_at: null }).eq("admission_no", admissionNo.trim().toUpperCase());
+        return {};
+    };
+
+    const changeParentPasswordOffline = async (admissionNo: string, newPassword: string) => {
+        const { error } = await supabase
+            .from("students")
+            .update({ password: newPassword }) // Parent passwords are not currently hashed based on seedData/implementation
+            .eq("admission_no", admissionNo.trim().toUpperCase());
+            
+        if (error) return { error: error.message };
+        return {};
+    };
+
     return (
         <AuthContext.Provider value={{
             adminUser, parentStudentId,
@@ -172,6 +248,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             isFaculty: adminUser?.role === "faculty",
             isSuperAdmin: adminUser?.role === "superadmin",
             loginAdmin, loginParent, logout, changePassword, sendOtp, verifyOtp,
+            findParentForReset, sendParentOtpEmail, verifyParentOtpEmail, changeParentPasswordOffline
         }}>
             {children}
         </AuthContext.Provider>

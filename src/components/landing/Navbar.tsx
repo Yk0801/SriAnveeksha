@@ -63,8 +63,8 @@ const Navbar = () => {
             <button
               onClick={() => navigate("/login?role=parent")}
               className={`flex items-center gap-1.5 text-sm font-semibold transition-all px-3 py-1.5 rounded-lg ${scrolled
-                  ? "text-[#d4af37] hover:bg-gold-50 border border-[#d4af37]/30"
-                  : "text-white/90 hover:bg-white/10 border border-white/25"
+                ? "text-[#d4af37] hover:bg-gold-50 border border-[#d4af37]/30"
+                : "text-white/90 hover:bg-white/10 border border-white/25"
                 }`}
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
@@ -76,8 +76,8 @@ const Navbar = () => {
             <button
               onClick={() => navigate("/login?role=admin")}
               className={`flex items-center gap-1.5 text-sm font-semibold transition-all px-3 py-1.5 rounded-lg ${scrolled
-                  ? "text-[#0c2340] hover:bg-navy-50 border border-[#0c2340]/30"
-                  : "text-white/90 hover:bg-white/10 border border-white/25"
+                ? "text-[#0c2340] hover:bg-navy-50 border border-[#0c2340]/30"
+                : "text-white/90 hover:bg-white/10 border border-white/25"
                 }`}
               style={{ fontFamily: "'Plus Jakarta Sans', sans-serif" }}
             >
