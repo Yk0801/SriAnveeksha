@@ -28,9 +28,11 @@ interface AuthContextType {
     sendOtp: (email: string) => Promise<{ error?: string }>;
     verifyOtp: (email: string, otp: string) => Promise<{ error?: string }>;
     findParentForReset: (admissionNo: string) => Promise<{ error?: string; father_email_id?: string; father_mobile_number?: string, name?: string }>;
-    sendParentOtpEmail: (admissionNo: string, email: string, name: string) => Promise<{ error?: string }>;
-    verifyParentOtpEmail: (admissionNo: string, otp: string) => Promise<{ error?: string }>;
-    changeParentPasswordOffline: (admissionNo: string, newPassword: string) => Promise<{ error?: string }>;
+    sendParentOtpEmail: (adm: string, email: string, name: string) => Promise<{ error?: string }>;
+    sendParentOtpSms: (adm: string, mobile: string, name: string) => Promise<{ error?: string }>;
+    verifyParentOtp: (adm: string, otp: string) => Promise<{ error?: string }>;
+    changeParentPasswordOffline: (adm: string, pwd: string) => Promise<{ error?: string }>;
+    invokeFast2Sms: (message: string, numbers: string) => Promise<{ error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -215,7 +217,49 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         return {};
     };
 
-    const verifyParentOtpEmail = async (admissionNo: string, otp: string) => {
+    const invokeFast2Sms = async (message: string, numbers: string) => {
+        try {
+            // Fast2SMS strictly wants 10-digit numbers, commas allowed. Strip +91, spaces.
+            const cleanNumbers = numbers.replace(/\+91/g, '').replace(/\D/g, '');
+            const { error: fnErr, data } = await supabase.functions.invoke("fast2sms", {
+                body: { message, numbers: cleanNumbers }
+            });
+            
+            if (fnErr) {
+                // If the edge function returns a 400 with a custom JSON error, we extract it here!
+                let detailedMsg = fnErr.message;
+                if (fnErr.context && typeof fnErr.context.json === 'function') {
+                    try {
+                        const errBody = await fnErr.context.json();
+                        if (errBody.error) detailedMsg = errBody.error;
+                    } catch (e) {}
+                }
+                return { error: detailedMsg };
+            }
+            if (data?.error) return { error: data.error };
+        } catch (e: any) {
+            return { error: e.message || "Failed to trigger fast2sms edge function" };
+        }
+        return {};
+    };
+
+    const sendParentOtpSms = async (admissionNo: string, mobile: string, name: string) => {
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const expires = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+
+        const { error } = await supabase
+            .from("students")
+            .update({ otp, otp_expires_at: expires })
+            .eq("admission_no", admissionNo.trim().toUpperCase());
+
+        if (error) return { error: "Failed to set OTP in database." };
+
+        const message = `Hi ${name || "Parent"}, ${otp} is your verification code for Sri Anveeksha Admin/Parent portal.`;
+        return await invokeFast2Sms(message, mobile);
+    };
+
+
+    const verifyParentOtp = async (admissionNo: string, otp: string) => {
         const { data, error } = await supabase
             .from("students")
             .select("otp, otp_expires_at")
@@ -248,7 +292,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             isFaculty: adminUser?.role === "faculty",
             isSuperAdmin: adminUser?.role === "superadmin",
             loginAdmin, loginParent, logout, changePassword, sendOtp, verifyOtp,
-            findParentForReset, sendParentOtpEmail, verifyParentOtpEmail, changeParentPasswordOffline
+            findParentForReset, sendParentOtpEmail, sendParentOtpSms, verifyParentOtp, changeParentPasswordOffline,
+            invokeFast2Sms
         }}>
             {children}
         </AuthContext.Provider>

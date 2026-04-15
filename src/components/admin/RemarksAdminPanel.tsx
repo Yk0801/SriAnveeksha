@@ -20,7 +20,8 @@ const RemarksAdminPanel = () => {
   const [saving, setSaving] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [entriesPerPage, setEntriesPerPage] = useState(10);
-  const { adminUser } = useAuth();
+  const [sendSms, setSendSms] = useState(false);
+  const { adminUser, invokeFast2Sms } = useAuth();
 
   // Load all students on mount
   useEffect(() => {
@@ -86,9 +87,23 @@ const RemarksAdminPanel = () => {
       }]);
       setSaving(false);
       if (error) { toast.error(error.message); return; }
-      toast.success("Remark added!");
+      
+      if (sendSms) {
+         toast.loading("Sending SMS to parent...", { id: "smsLoad" });
+         const mobile = student.father_mobile_number || student.mother_mobile_number || student.guardian_mobile_number || student.mobile_number;
+         if (mobile) {
+            const textBody = `Sri Anveeksha - New ${form.category} Remark for ${student.name}:\n${form.remark}\n- By ${adminUser?.name || "Faculty"}`;
+            await invokeFast2Sms(textBody, mobile);
+            toast.success("Remark added & SMS sent!", { id: "smsLoad" });
+         } else {
+            toast.error("Remark added, but no mobile number available for SMS.", { id: "smsLoad" });
+         }
+      } else {
+         toast.success("Remark added!");
+      }
     }
     setForm({ category: "Academic", subject: "", remark: "" });
+    setSendSms(false);
     const { data: rData } = await supabase.from("remarks").select("*").eq("student_id", student.id).order("created_at", { ascending: false });
     setRemarks(rData || []);
   };
@@ -131,11 +146,19 @@ const RemarksAdminPanel = () => {
               <textarea required value={form.remark} onChange={e => setForm({ ...form, remark: e.target.value })} rows={2}
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-[#d4af37]/30" style={{ fontFamily: "Inter,sans-serif" }} />
             </div>
-            <div className="sm:col-span-2 flex gap-3">
-              <button type="submit" disabled={saving} className="bg-[#d4af37] text-white font-bold text-xs px-5 py-2.5 rounded-lg disabled:opacity-60">{saving ? "Saving…" : editingId ? "Update Remark" : "Add Remark"}</button>
-              {editingId && (
-                <button type="button" onClick={() => { setEditingId(null); setForm({ category: "Academic", subject: "", remark: "" }); }} className="border border-slate-300 text-slate-600 font-bold text-xs px-5 py-2.5 rounded-lg">Cancel</button>
-              )}
+            <div className="sm:col-span-2 flex flex-col gap-3">
+              {/* Temporarily disabled Fast2SMS DLT routing 
+              <label className="flex items-center gap-2 cursor-pointer w-max">
+                <input type="checkbox" checked={sendSms} onChange={e => setSendSms(e.target.checked)} className="w-4 h-4 text-[#d4af37] border-slate-300 rounded focus:ring-[#d4af37]" />
+                <span className="text-xs font-bold text-slate-700" style={{ fontFamily: "Inter,sans-serif" }}>Send Copy via SMS to Parent</span>
+              </label>
+              */}
+              <div className="flex gap-3">
+                <button type="submit" disabled={saving} className="bg-[#d4af37] text-white font-bold text-xs px-5 py-2.5 rounded-lg disabled:opacity-60">{saving ? "Saving…" : editingId ? "Update Remark" : "Add Remark"}</button>
+                {editingId && (
+                  <button type="button" onClick={() => { setEditingId(null); setForm({ category: "Academic", subject: "", remark: "" }); }} className="border border-slate-300 text-slate-600 font-bold text-xs px-5 py-2.5 rounded-lg">Cancel</button>
+                )}
+              </div>
             </div>
           </form>
           {loading ? <p className="text-slate-400 text-sm py-4">Loading remarks…</p> : (

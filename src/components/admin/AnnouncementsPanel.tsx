@@ -11,8 +11,9 @@ import { SectionTitle, Inp, Sel, PaginationControls, EntriesDropdown } from "./S
 const AnnouncementsPanel = () => {
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [form, setForm] = useState({ title: "", message: "", audience: "All" });
+  const [sendSms, setSendSms] = useState(false);
   const [saving, setSaving] = useState(false);
-  const { adminUser } = useAuth();
+  const { adminUser, invokeFast2Sms } = useAuth();
 
   useEffect(() => {
     supabase.from("announcements").select("*").order("created_at", { ascending: false }).then(({ data }) => setAnnouncements(data || []));
@@ -22,11 +23,40 @@ const AnnouncementsPanel = () => {
     e.preventDefault();
     setSaving(true);
     const { data, error } = await supabase.from("announcements").insert([{ ...form, posted_by: adminUser?.name }]).select().single();
+    if (error) { setSaving(false); toast.error(error.message); return; }
+    
+    // Broadcast via Fast2SMS if ticked
+    if (sendSms && (form.audience === "All" || form.audience === "All Parents" || ["Pre-KG", "LKG", "UKG"].includes(form.audience))) {
+        toast.loading("Broadcasting SMS...", { id: "smsLoad" });
+        // Fetch matching parent numbers dynamically
+        let query = supabase.from("students").select("father_mobile_number, mother_mobile_number, guardian_mobile_number, mobile_number").eq("status", "Active");
+        if (["Pre-KG", "LKG", "UKG"].includes(form.audience)) {
+            query = query.eq("class", form.audience);
+        }
+        
+        const { data: studentsInfo } = await query;
+        if (studentsInfo && studentsInfo.length > 0) {
+            // Aggregate all the primary mobiles 
+            const mobiles = studentsInfo.map(s => s.father_mobile_number || s.mother_mobile_number || s.guardian_mobile_number || s.mobile_number).filter(Boolean);
+            if (mobiles.length > 0) {
+                // Batch maximum 1000 numbers allowed by Fast2SMS bulk, but let's just join them array style
+                const commaList = mobiles.join(",");
+                const textBody = `Notice: ${form.title}\n${form.message}\n- Sri Anveeksha School`;
+                await invokeFast2Sms(textBody, commaList);
+                toast.success(`Broadly sent SMS to ${mobiles.length} parents!`, { id: "smsLoad" });
+            } else {
+                toast.error("No valid mobile numbers found for this audience.", { id: "smsLoad" });
+            }
+        } else {
+            toast.error("No parents found for this audience.", { id: "smsLoad" });
+        }
+    }
+
     setSaving(false);
-    if (error) { toast.error(error.message); return; }
     toast.success("Announcement posted!");
     setAnnouncements([data, ...announcements]);
     setForm({ title: "", message: "", audience: "All" });
+    setSendSms(false);
   };
 
   const del = async (id: string) => {
@@ -46,9 +76,17 @@ const AnnouncementsPanel = () => {
           <textarea required rows={3} value={form.message} onChange={e => setForm({ ...form, message: e.target.value })}
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs resize-none focus:outline-none focus:ring-2 focus:ring-[#d4af37]/30" style={{ fontFamily: "Inter,sans-serif" }} />
         </div>
-        <Sel label="Audience" value={form.audience} onChange={e => setForm({ ...form, audience: e.target.value })}>
-          {["All", "Pre-KG", "LKG", "UKG", "All Parents", "All Staff"].map(a => <option key={a}>{a}</option>)}
-        </Sel>
+        <div className="flex items-center justify-between">
+          <Sel label="Audience" value={form.audience} onChange={e => setForm({ ...form, audience: e.target.value })}>
+            {["All", "Pre-KG", "LKG", "UKG", "All Parents", "All Staff"].map(a => <option key={a}>{a}</option>)}
+          </Sel>
+          {/* Temporarily disabled Fast2SMS DLT routing
+          <label className="flex items-center gap-2 cursor-pointer pr-4 mt-4">
+            <input type="checkbox" checked={sendSms} onChange={e => setSendSms(e.target.checked)} className="w-4 h-4 text-[#d4af37] border-slate-300 rounded focus:ring-[#d4af37]" />
+            <span className="text-xs font-bold text-slate-700" style={{ fontFamily: "Inter,sans-serif" }}>Also Broadcast via SMS</span>
+          </label>
+          */}
+        </div>
         <button type="submit" disabled={saving} className="bg-[#d4af37] text-white font-bold text-xs px-5 py-2.5 rounded-lg disabled:opacity-60">{saving ? "Posting…" : "Post Announcement"}</button>
       </form>
       <div className="divide-y divide-slate-100">
