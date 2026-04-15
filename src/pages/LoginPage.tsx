@@ -10,7 +10,7 @@ const LoginPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const role = searchParams.get("role") || "parent";
-  const { loginAdmin, loginParent, sendOtp, verifyOtp, changePassword, adminUser, parentStudentId, findParentForReset, sendParentOtpEmail, verifyParentOtpEmail, changeParentPasswordOffline } = useAuth();
+  const { loginAdmin, loginParent, sendOtp, verifyOtp, changePassword, adminUser, parentStudentId, findParentForReset, sendParentOtpEmail, sendParentOtpSms, verifyParentOtp, changeParentPasswordOffline } = useAuth();
 
   useEffect(() => {
     if (adminUser && !adminUser.must_change_password) navigate("/admin", { replace: true });
@@ -45,10 +45,12 @@ const LoginPage = () => {
   const [mustPwd, setMustPwd] = useState("");
   const [mustConfirm, setMustConfirm] = useState("");
 
+  // Generic flow visibility
+  const [showFlowPwd, setShowFlowPwd] = useState(false);
+
   // Parent Reset state
   const [pData, setPData] = useState<{name?: string, email?: string, mobile?: string} | null>(null);
   const [pMethod, setPMethod] = useState<"email" | "sms">("email");
-  const [pFirebaseResult, setPFirebaseResult] = useState<any>(null);
 
   const handleParentLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -150,37 +152,17 @@ const LoginPage = () => {
       setView("p_otp");
     } else {
       if (!pData?.mobile) { setFlowErr("No mobile registered."); setFlowLoading(false); return; }
-      try {
-        // Firebase Auth Requires Recaptcha!
-        const { auth, RecaptchaVerifier, signInWithPhoneNumber } = await import("@/lib/firebase");
-        
-        // Clear old instance to prevent double-render crashes
-        if ((window as any).recaptchaVerifier) {
-          try { (window as any).recaptchaVerifier.clear(); } catch (e) {}
-          (window as any).recaptchaVerifier = undefined;
-        }
-        
-        // Ensure format is E.164 (e.g. +91XXXXXXXXXX)
-        let phone = pData.mobile;
-        if (!phone.startsWith("+")) phone = "+91" + phone;
-
-        // Create a VISIBLE normal reCAPTCHA. Invisible reCAPTCHA is highly aggressive on un-secured localhost URLs and often throws invalid-app-credentials.
-        const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          size: 'normal'
-        });
-        (window as any).recaptchaVerifier = verifier;
-
-        // Wait for user to manually complete the CAPTCHA now!
-        const confirmationResult = await signInWithPhoneNumber(auth, phone, verifier);
-        setPFirebaseResult(confirmationResult);
-        toast.success(`OTP sent via SMS!`);
-        setView("p_otp");
-      } catch (err: any) {
-        console.error(err);
-        setFlowErr("Failed to send SMS (Ensure Firebase is configured).");
-      } finally {
-        setFlowLoading(false);
+      
+      const { error } = await sendParentOtpSms(pAdm, pData.mobile, pData.name || "Parent");
+      setFlowLoading(false);
+      
+      if (error) { 
+        setFlowErr(error); 
+        return; 
       }
+      
+      toast.success(`OTP sent via SMS!`);
+      setView("p_otp");
     }
   };
 
@@ -188,23 +170,11 @@ const LoginPage = () => {
     e.preventDefault();
     setFlowLoading(true); setFlowErr("");
 
-    if (pMethod === "email") {
-      const { error } = await verifyParentOtpEmail(pAdm, otpVal);
-      setFlowLoading(false);
-      if (error) { setFlowErr(error); return; }
-      setView("p_newpwd");
-    } else {
-      try {
-        if (!pFirebaseResult) throw new Error("No SMS session active");
-        await pFirebaseResult.confirm(otpVal);
-        setView("p_newpwd");
-      } catch (err: any) {
-        console.error(err);
-        setFlowErr("Invalid or expired SMS OTP.");
-      } finally {
-        setFlowLoading(false);
-      }
-    }
+    // Both Email and SMS now correctly hit our backend OTP verifier!
+    const { error } = await verifyParentOtp(pAdm, otpVal);
+    setFlowLoading(false);
+    if (error) { setFlowErr(error); return; }
+    setView("p_newpwd");
   };
 
   const handlePSetNewPassword = async (e: React.FormEvent) => {
@@ -395,7 +365,12 @@ const LoginPage = () => {
               {[{ label: "New Password", val: newPwd, set: setNewPwd }, { label: "Confirm Password", val: confirmPwd, set: setConfirmPwd }].map(f => (
                 <div key={f.label}>
                   <label className={label} style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>{f.label}</label>
-                  <input type="password" required value={f.val} onChange={e => f.set(e.target.value)} className={inputCls} style={{ fontFamily: "Inter,sans-serif" }} />
+                  <div className="relative">
+                    <input type={showFlowPwd ? "text" : "password"} required value={f.val} onChange={e => f.set(e.target.value)} className={`${inputCls} pr-11`} style={{ fontFamily: "Inter,sans-serif" }} />
+                    <button type="button" onClick={() => setShowFlowPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                      {showFlowPwd ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
                 </div>
               ))}
               {flowErr && <p className="text-red-600 text-xs font-medium bg-red-50 px-3 py-2 rounded-lg">{flowErr}</p>}
@@ -420,7 +395,12 @@ const LoginPage = () => {
               {[{ label: "New Password", val: mustPwd, set: setMustPwd }, { label: "Confirm Password", val: mustConfirm, set: setMustConfirm }].map(f => (
                 <div key={f.label}>
                   <label className={label} style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>{f.label}</label>
-                  <input type="password" required value={f.val} onChange={e => f.set(e.target.value)} className={inputCls} placeholder="Min. 8 characters" style={{ fontFamily: "Inter,sans-serif" }} />
+                  <div className="relative">
+                    <input type={showFlowPwd ? "text" : "password"} required value={f.val} onChange={e => f.set(e.target.value)} className={`${inputCls} pr-11`} placeholder="Min. 8 characters" style={{ fontFamily: "Inter,sans-serif" }} />
+                    <button type="button" onClick={() => setShowFlowPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                      {showFlowPwd ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
                 </div>
               ))}
               {flowErr && <p className="text-red-600 text-xs font-medium bg-red-50 px-3 py-2 rounded-lg">{flowErr}</p>}
@@ -465,7 +445,7 @@ const LoginPage = () => {
                     <p className="text-slate-500 text-xs">{maskEmail(pData?.email) || "Not available"}</p>
                   </div>
                 </label>
-                
+                {/* Temporarily disabled SMS due to lack of DLT / API costs
                 <label className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${pMethod === "sms" ? "border-[#d4af37] bg-gold-50/10" : "border-slate-100 bg-white"}`}>
                   <input type="radio" name="p_method" value="sms" checked={pMethod === "sms"} onChange={() => setPMethod("sms")} className="w-4 h-4 text-[#d4af37] focus:ring-[#d4af37]" />
                   <div>
@@ -473,10 +453,10 @@ const LoginPage = () => {
                     <p className="text-slate-500 text-xs">{maskPhone(pData?.mobile) || "Not available"}</p>
                   </div>
                 </label>
+                */}
               </div>
 
-              {/* Invisible Recaptcha target for Firebase */}
-              <div id="recaptcha-container"></div>
+              {/* No reCAPTCHA needed for Fast2SMS */}
 
               {flowErr && <p className="text-red-600 text-xs font-medium bg-red-50 px-3 py-2 rounded-lg">{flowErr}</p>}
               <button type="submit" disabled={flowLoading || (pMethod === "email" && !pData?.email) || (pMethod === "sms" && !pData?.mobile)} className={btnPrimary} style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>
@@ -515,7 +495,12 @@ const LoginPage = () => {
               {[{ label: "New Password", val: newPwd, set: setNewPwd }, { label: "Confirm Password", val: confirmPwd, set: setConfirmPwd }].map(f => (
                 <div key={f.label}>
                   <label className={label} style={{ fontFamily: "'Plus Jakarta Sans',sans-serif" }}>{f.label}</label>
-                  <input type="password" required value={f.val} onChange={e => f.set(e.target.value)} className={inputCls} style={{ fontFamily: "Inter,sans-serif" }} />
+                  <div className="relative">
+                    <input type={showFlowPwd ? "text" : "password"} required value={f.val} onChange={e => f.set(e.target.value)} className={`${inputCls} pr-11`} style={{ fontFamily: "Inter,sans-serif" }} />
+                    <button type="button" onClick={() => setShowFlowPwd(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
+                      {showFlowPwd ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
                 </div>
               ))}
               {flowErr && <p className="text-red-600 text-xs font-medium bg-red-50 px-3 py-2 rounded-lg">{flowErr}</p>}
